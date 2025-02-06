@@ -1,36 +1,46 @@
-'use client';
+"use client";
 
-import React, { useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Upload, FilePlus, Trash2 } from 'lucide-react';
-import Papa from 'papaparse';
+import React, { useState, useCallback, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Upload, FilePlus, Plus, X } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { processReceipt, type ReceiptItem } from "@/lib/pdf-processor";
 
-interface ReceiptItem {
-  description: string;
-  price: number;
-  participants: string[];
+interface ItemAllocation {
+  forAll: boolean;
+  people: Record<string, boolean>;
 }
 
-interface Person {
-  id: string;
-  name: string;
+interface ProcessedTotals {
+  subtotal: number;
+  discount: number;
+  finalTotal: number;
+  totals: Record<string, number>;
 }
 
-const ReceiptSplitter = () => {
+export const ReceiptSplitter = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [people, setPeople] = useState<Person[]>([]);
-  const [newPersonName, setNewPersonName] = useState('');
   const [items, setItems] = useState<ReceiptItem[]>([]);
-  const [totals, setTotals] = useState<Record<string, number>>({});
+  const [people, setPeople] = useState<string[]>([]);
+  const [newPerson, setNewPerson] = useState("");
+  const [allocations, setAllocations] = useState<
+    Record<number, ItemAllocation>
+  >({});
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [totals, setTotals] = useState<ProcessedTotals | null>(null);
+  const [originalTotal, setOriginalTotal] = useState<number>(0);
+  const [cardDiscount, setCardDiscount] = useState<number>(0);
 
   const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile?.type === 'application/pdf') {
+    if (droppedFile?.type === "application/pdf") {
       setFile(droppedFile);
-      processReceipt(droppedFile);
+      processFile(droppedFile);
     }
   }, []);
 
@@ -38,213 +48,345 @@ const ReceiptSplitter = () => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
-      processReceipt(selectedFile);
+      processFile(selectedFile);
     }
   }, []);
 
-  const processReceipt = async (file: File) => {
+  const addPerson = () => {
+    if (newPerson.trim() && !people.includes(newPerson.trim())) {
+      setPeople([...people, newPerson.trim()]);
+      setNewPerson("");
+
+      // Update allocations with the new person
+      const updatedAllocations = { ...allocations };
+      Object.keys(updatedAllocations).forEach((index) => {
+        updatedAllocations[Number(index)].people[newPerson.trim()] = false;
+      });
+      setAllocations(updatedAllocations);
+    }
+  };
+
+  const removePerson = (personToRemove: string) => {
+    setPeople(people.filter((person) => person !== personToRemove));
+
+    // Update allocations removing the person
+    const updatedAllocations = { ...allocations };
+    Object.keys(updatedAllocations).forEach((index) => {
+      const { [personToRemove]: _, ...remainingPeople } =
+        updatedAllocations[Number(index)].people;
+      updatedAllocations[Number(index)].people = remainingPeople;
+    });
+    setAllocations(updatedAllocations);
+  };
+
+  const processFile = async (file: File) => {
     setIsProcessing(true);
+    setError(null);
     try {
       const arrayBuffer = await file.arrayBuffer();
-      // Here you would process the PDF using pdf.js or a similar library
-      // For now, we'll add some sample items
-      const sampleItems: ReceiptItem[] = [
-        { description: 'Sample Item 1', price: 10.99, participants: [] },
-        { description: 'Sample Item 2', price: 15.50, participants: [] },
-        { description: 'Sample Item 3', price: 8.75, participants: [] },
-      ];
-      setItems(sampleItems);
+      const { items, total, discount } = await processReceipt(arrayBuffer);
+
+      setItems(items);
+      setOriginalTotal(total);
+      setCardDiscount(discount);
+
+      // Initialize allocations
+      const initialAllocations: Record<number, ItemAllocation> = {};
+      items.forEach((_, index) => {
+        initialAllocations[index] = {
+          forAll: false,
+          people: people.reduce(
+            (acc, person) => ({ ...acc, [person]: false }),
+            {}
+          ),
+        };
+      });
+      setAllocations(initialAllocations);
     } catch (error) {
-      console.error('Error processing receipt:', error);
-    }
-    setIsProcessing(false);
-  };
-
-  const addPerson = () => {
-    if (newPersonName.trim()) {
-      setPeople([...people, { id: Date.now().toString(), name: newPersonName.trim() }]);
-      setNewPersonName('');
+      console.error("Error processing receipt:", error);
+      setError(
+        "Failed to process the receipt. Please make sure it's a valid PDF receipt."
+      );
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const removePerson = (id: string) => {
-    setPeople(people.filter(person => person.id !== id));
-    setItems(items.map(item => ({
-      ...item,
-      participants: item.participants.filter(p => p !== id)
-    })));
-  };
-
-  const toggleParticipant = (itemIndex: number, personId: string) => {
-    setItems(items.map((item, index) => {
-      if (index === itemIndex) {
-        const participants = item.participants.includes(personId)
-          ? item.participants.filter(p => p !== personId)
-          : [...item.participants, personId];
-        return { ...item, participants };
-      }
-      return item;
+  const toggleAllocation = (itemIndex: number, person: string) => {
+    setAllocations((prev) => ({
+      ...prev,
+      [itemIndex]: {
+        ...prev[itemIndex],
+        people: {
+          ...prev[itemIndex].people,
+          [person]: !prev[itemIndex].people[person],
+        },
+        forAll: false,
+      },
     }));
   };
 
-  const setAllParticipants = (itemIndex: number) => {
-    setItems(items.map((item, index) => {
-      if (index === itemIndex) {
-        return { ...item, participants: people.map(p => p.id) };
-      }
-      return item;
+  const toggleForAll = (itemIndex: number) => {
+    setAllocations((prev) => ({
+      ...prev,
+      [itemIndex]: {
+        forAll: !prev[itemIndex].forAll,
+        people: people.reduce(
+          (acc, person) => ({ ...acc, [person]: false }),
+          {}
+        ),
+      },
     }));
   };
 
-  const calculateTotals = () => {
-    const newTotals: Record<string, number> = {};
-    
-    items.forEach(item => {
-      const numParticipants = item.participants.length;
-      if (numParticipants > 0) {
-        const splitAmount = item.price / numParticipants;
-        item.participants.forEach(participantId => {
-          newTotals[participantId] = (newTotals[participantId] || 0) + splitAmount;
+  const calculateSplit = useCallback(() => {
+    if (items.length === 0 || people.length === 0) return null;
+
+    const personTotals: Record<string, number> = people.reduce(
+      (acc, person) => ({ ...acc, [person]: 0 }),
+      {}
+    );
+    let subtotal = 0;
+
+    items.forEach((item, index) => {
+      const allocation = allocations[index];
+      if (!allocation) return;
+
+      subtotal += item.price;
+
+      if (allocation.forAll) {
+        // Split evenly among all people
+        const perPerson = item.price / people.length;
+        people.forEach((person) => {
+          personTotals[person] += perPerson;
         });
+      } else {
+        // Split among selected people
+        const selectedPeople = Object.entries(allocation.people)
+          .filter(([_, selected]) => selected)
+          .map(([person]) => person);
+
+        if (selectedPeople.length > 0) {
+          const perPerson = item.price / selectedPeople.length;
+          selectedPeople.forEach((person) => {
+            personTotals[person] += perPerson;
+          });
+        }
       }
     });
-    
-    setTotals(newTotals);
-  };
+
+    // Apply card discount proportionally
+    const discountMultiplier = (subtotal - cardDiscount) / subtotal;
+    Object.keys(personTotals).forEach((person) => {
+      personTotals[person] *= discountMultiplier;
+    });
+
+    const finalTotal = Object.values(personTotals).reduce(
+      (sum, amount) => sum + amount,
+      0
+    );
+
+    return {
+      subtotal,
+      discount: cardDiscount,
+      finalTotal,
+      totals: personTotals,
+    };
+  }, [items, people, allocations, cardDiscount]);
+
+  // Update totals whenever allocations change
+  useEffect(() => {
+    const newTotals = calculateSplit();
+    if (newTotals) {
+      setTotals(newTotals);
+    }
+  }, [calculateSplit]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Receipt Splitter</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* File Upload Section */}
-          <div 
-            className="border-2 border-dashed rounded-lg p-8 text-center mb-6"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={onDrop}
-          >
-            {!file ? (
-              <div>
-                <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                <p className="text-gray-600">Drag and drop your receipt PDF here, or</p>
-                <label className="mt-2 inline-block">
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept=".pdf"
-                    onChange={onFileSelect}
-                  />
-                  <Button variant="outline" className="mt-2">
-                    <FilePlus className="mr-2 h-4 w-4" />
-                    Select File
-                  </Button>
-                </label>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between">
-                <span>{file.name}</span>
-                <Button
-                  variant="ghost"
-                  onClick={() => setFile(null)}
-                >
-                  <Trash2 className="h-4 w-4" />
+    <div className="w-full max-w-7xl mx-auto">
+      {!file ? (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Receipt Splitter</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={onDrop}
+            >
+              <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <p className="text-gray-600">Drop your receipt PDF here, or</p>
+              <label className="mt-2 inline-block">
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".pdf"
+                  onChange={onFileSelect}
+                />
+                <Button variant="outline" className="mt-2">
+                  <FilePlus className="mr-2 h-4 w-4" />
+                  Select File
                 </Button>
-              </div>
+              </label>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Left Column - People and Summary */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>People</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2 mb-4">
+                  <Input
+                    placeholder="Add person"
+                    value={newPerson}
+                    onChange={(e) => setNewPerson(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && addPerson()}
+                  />
+                  <Button onClick={addPerson}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {people.map((person) => (
+                    <div
+                      key={person}
+                      className="flex justify-between items-center p-2 bg-gray-50 rounded"
+                    >
+                      <span>{person}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removePerson(person)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {totals && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <span>Subtotal:</span>
+                        <span className="text-right">
+                          €{totals.subtotal.toFixed(2)}
+                        </span>
+                        <span>Card Discount:</span>
+                        <span className="text-right">
+                          -€{totals.discount.toFixed(2)}
+                        </span>
+                        <span className="font-medium">Final Total:</span>
+                        <span className="text-right font-medium">
+                          €{totals.finalTotal.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-medium mb-2">Split Results</h3>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {Object.entries(totals.totals).map(
+                          ([person, amount]) => (
+                            <React.Fragment key={person}>
+                              <span>{person}'s Share:</span>
+                              <span className="text-right">
+                                €{amount.toFixed(2)}
+                              </span>
+                            </React.Fragment>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
 
-          {/* People Management Section */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-4">People</h3>
-            <div className="flex gap-2 mb-4">
-              <input
-                type="text"
-                value={newPersonName}
-                onChange={(e) => setNewPersonName(e.target.value)}
-                className="flex-1 p-2 border rounded"
-                placeholder="Enter name"
-              />
-              <Button onClick={addPerson}>Add Person</Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {people.map(person => (
-                <div key={person.id} className="flex items-center gap-2 bg-gray-100 rounded px-3 py-1">
-                  <span>{person.name}</span>
-                  <button
-                    onClick={() => removePerson(person.id)}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Right Column - Items */}
+          <div className="h-screen pb-6">
+            <Card className="h-full">
+              <CardHeader>
+                <CardTitle>Receipt Items</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[calc(100%-5rem)] overflow-y-auto">
+                {error && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
 
-          {/* Items Section */}
-          {items.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Items</h3>
-              <div className="space-y-4">
-                {items.map((item, index) => (
-                  <div key={index} className="border rounded p-4">
-                    <div className="flex justify-between mb-2">
-                      <span className="font-medium">{item.description}</span>
-                      <span>€{item.price.toFixed(2)}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {people.map(person => (
-                        <label key={person.id} className="flex items-center gap-1">
-                          <input
-                            type="checkbox"
-                            checked={item.participants.includes(person.id)}
-                            onChange={() => toggleParticipant(index, person.id)}
-                            className="rounded"
-                          />
-                          <span>{person.name}</span>
-                        </label>
-                      ))}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setAllParticipants(index)}
-                      >
-                        Split Among All
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <Button
-                className="mt-6"
-                onClick={calculateTotals}
-              >
-                Calculate Split
-              </Button>
-
-              {/* Totals Display */}
-              {Object.keys(totals).length > 0 && (
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold mb-4">Final Split</h3>
-                  <div className="space-y-2">
-                    {people.map(person => (
-                      <div key={person.id} className="flex justify-between">
-                        <span>{person.name}</span>
-                        <span>€{(totals[person.id] || 0).toFixed(2)}</span>
+                {isProcessing ? (
+                  <div className="text-center py-4">Processing receipt...</div>
+                ) : (
+                  <div className="space-y-4">
+                    {items.map((item, index) => (
+                      <div key={index} className="p-4 border rounded-lg">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="font-medium">{item.description}</p>
+                            <p className="text-sm text-gray-500">
+                              €{item.price.toFixed(2)}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => toggleForAll(index)}
+                            className={
+                              allocations[index]?.forAll ? "bg-blue-100" : ""
+                            }
+                          >
+                            Split Evenly
+                          </Button>
+                        </div>
+                        {!allocations[index]?.forAll && (
+                          <div className="flex flex-wrap gap-4 mt-2">
+                            {people.map((person) => (
+                              <div
+                                key={person}
+                                className="flex items-center space-x-2"
+                              >
+                                <Checkbox
+                                  id={`${index}-${person}`}
+                                  checked={allocations[index]?.people[person]}
+                                  onCheckedChange={() =>
+                                    toggleAllocation(index, person)
+                                  }
+                                />
+                                <label
+                                  htmlFor={`${index}-${person}`}
+                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                >
+                                  {person}
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
-export default ReceiptSplitter;
