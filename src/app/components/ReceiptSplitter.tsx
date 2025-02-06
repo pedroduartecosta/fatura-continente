@@ -1,3 +1,6 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 "use client";
 
 import React, { useState, useCallback, useEffect } from "react";
@@ -32,7 +35,6 @@ export const ReceiptSplitter = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totals, setTotals] = useState<ProcessedTotals | null>(null);
-  const [originalTotal, setOriginalTotal] = useState<number>(0);
   const [cardDiscount, setCardDiscount] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<"items" | "summary">("items");
 
@@ -85,17 +87,19 @@ export const ReceiptSplitter = () => {
     setError(null);
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const { items, total, discount } = await processReceipt(arrayBuffer);
+      const { items, total, subtotal, discount } = await processReceipt(
+        arrayBuffer
+      );
 
+      console.log("items", items.length);
       setItems(items);
-      setOriginalTotal(total);
       setCardDiscount(discount);
 
       // Initialize allocations with everything split evenly by default
       const initialAllocations: Record<number, ItemAllocation> = {};
       items.forEach((_, index) => {
         initialAllocations[index] = {
-          forAll: true, // Set to true by default
+          forAll: true,
           people: people.reduce(
             (acc, person) => ({ ...acc, [person]: false }),
             {}
@@ -161,6 +165,7 @@ export const ReceiptSplitter = () => {
     );
     let subtotal = 0;
 
+    // First calculate the base amounts without discount
     items.forEach((item, index) => {
       const allocation = allocations[index];
       if (!allocation) return;
@@ -194,10 +199,10 @@ export const ReceiptSplitter = () => {
       }
     });
 
-    // Apply card discount proportionally
-    const discountMultiplier = (subtotal - cardDiscount) / subtotal;
+    // Apply card discount evenly among all people
+    const discountPerPerson = cardDiscount / people.length;
     Object.keys(personTotals).forEach((person) => {
-      personTotals[person] *= discountMultiplier;
+      personTotals[person] -= discountPerPerson;
     });
 
     const finalTotal = Object.values(personTotals).reduce(
@@ -220,11 +225,12 @@ export const ReceiptSplitter = () => {
       setTotals(newTotals);
     }
   }, [calculateSplit]);
+
   return (
     <div className="w-full max-w-7xl mx-auto p-4 md:p-6">
       <div className="text-center mb-6">
         <h1 className="text-2xl md:text-3xl font-bold mb-2">
-          Continente Invoice Splitter
+          Receipt Splitter
         </h1>
       </div>
 
@@ -237,25 +243,27 @@ export const ReceiptSplitter = () => {
               onDrop={onDrop}
             >
               <Upload className="mx-auto h-8 w-8 md:h-12 md:w-12 text-gray-400 mb-3" />
-              <p className="text-gray-600">Drop your receipt PDF here, or</p>
-              <label className="mt-2 inline-block">
+              <p className="text-gray-600 mb-4">
+                Drop your receipt PDF here, or
+              </p>
+              <div className="relative inline-block">
                 <input
                   type="file"
-                  className="hidden"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   accept=".pdf"
                   onChange={onFileSelect}
                 />
-                <Button variant="outline" className="mt-2">
+                <Button variant="outline" className="pointer-events-none">
                   <FilePlus className="mr-2 h-4 w-4" />
                   Select File
                 </Button>
-              </label>
+              </div>
             </div>
           </CardContent>
         </Card>
       ) : (
         <>
-          {/* Mobile Tabs - Only visible on mobile */}
+          {/* Mobile Tabs */}
           <div className="flex gap-2 mb-4 md:hidden">
             <Button
               variant={activeTab === "items" ? "default" : "outline"}
