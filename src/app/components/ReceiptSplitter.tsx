@@ -35,22 +35,6 @@ export const ReceiptSplitter = () => {
   const [originalTotal, setOriginalTotal] = useState<number>(0);
   const [cardDiscount, setCardDiscount] = useState<number>(0);
 
-  // Add function to split everything evenly
-  const splitEverything = () => {
-    const newAllocations = { ...allocations };
-    items.forEach((_, index) => {
-      newAllocations[index] = {
-        forAll: true,
-        people: people.reduce(
-          (acc, person) => ({ ...acc, [person]: false }),
-          {}
-        ),
-      };
-    });
-    setAllocations(newAllocations);
-  };
-
-  // Rest of the existing functions...
   const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
@@ -106,11 +90,11 @@ export const ReceiptSplitter = () => {
       setOriginalTotal(total);
       setCardDiscount(discount);
 
-      // Initialize allocations
+      // Initialize allocations with everything split evenly by default
       const initialAllocations: Record<number, ItemAllocation> = {};
       items.forEach((_, index) => {
         initialAllocations[index] = {
-          forAll: false,
+          forAll: true, // Set to true by default
           people: people.reduce(
             (acc, person) => ({ ...acc, [person]: false }),
             {}
@@ -132,25 +116,11 @@ export const ReceiptSplitter = () => {
     setAllocations((prev) => ({
       ...prev,
       [itemIndex]: {
-        ...prev[itemIndex],
+        forAll: false,
         people: {
           ...prev[itemIndex].people,
           [person]: !prev[itemIndex].people[person],
         },
-        forAll: false,
-      },
-    }));
-  };
-
-  const toggleForAll = (itemIndex: number) => {
-    setAllocations((prev) => ({
-      ...prev,
-      [itemIndex]: {
-        forAll: !prev[itemIndex].forAll,
-        people: people.reduce(
-          (acc, person) => ({ ...acc, [person]: false }),
-          {}
-        ),
       },
     }));
   };
@@ -185,6 +155,12 @@ export const ReceiptSplitter = () => {
         if (selectedPeople.length > 0) {
           const perPerson = item.price / selectedPeople.length;
           selectedPeople.forEach((person) => {
+            personTotals[person] += perPerson;
+          });
+        } else {
+          // If no specific people are selected, split evenly
+          const perPerson = item.price / people.length;
+          people.forEach((person) => {
             personTotals[person] += perPerson;
           });
         }
@@ -224,8 +200,8 @@ export const ReceiptSplitter = () => {
         <h1 className="text-3xl font-bold mb-4">Continente Invoice Splitter</h1>
         <p className="text-gray-600 max-w-2xl mx-auto">
           Split your Continente receipts easily with friends. Upload a PDF
-          receipt, add people's names, and allocate items either individually or
-          split them evenly among everyone.
+          receipt, add people's names, and select specific items for individual
+          allocation.
         </p>
       </div>
 
@@ -242,10 +218,15 @@ export const ReceiptSplitter = () => {
               </li>
               <li>Add the names of everyone involved in the split</li>
               <li>
-                For each item, either:
+                By default, all items are split evenly among everyone. For
+                specific items:
                 <ul className="list-disc list-inside ml-6 mt-1">
-                  <li>Click "Split Evenly" to divide it among everyone</li>
-                  <li>Or select specific people to split it between them</li>
+                  <li>Click on a person's name to assign the item to them</li>
+                  <li>The item will be split only among selected people</li>
+                  <li>
+                    If no one is selected, the item is split evenly among
+                    everyone
+                  </li>
                 </ul>
               </li>
               <li>View the final breakdown in the Summary section</li>
@@ -359,19 +340,12 @@ export const ReceiptSplitter = () => {
           </div>
 
           {/* Right Column - Items */}
-          <div className="h-screen pb-6">
-            <Card className="h-full">
-              <CardHeader className="flex flex-row items-center justify-between">
+          <div className="h-auto">
+            <Card className="h-auto">
+              <CardHeader>
                 <CardTitle>Receipt Items</CardTitle>
-                <Button
-                  variant="secondary"
-                  onClick={splitEverything}
-                  className="ml-4"
-                >
-                  Split All Evenly
-                </Button>
               </CardHeader>
-              <CardContent className="h-[calc(100%-5rem)] overflow-y-auto">
+              <CardContent className="h-[calc(80vh-12rem)] overflow-y-auto">
                 {error && (
                   <Alert variant="destructive" className="mb-4">
                     <AlertDescription>{error}</AlertDescription>
@@ -391,41 +365,24 @@ export const ReceiptSplitter = () => {
                               €{item.price.toFixed(2)}
                             </p>
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => toggleForAll(index)}
-                            className={
-                              allocations[index]?.forAll ? "bg-blue-100" : ""
-                            }
-                          >
-                            Split Evenly
-                          </Button>
                         </div>
-                        {!allocations[index]?.forAll && (
-                          <div className="flex flex-wrap gap-4 mt-2">
-                            {people.map((person) => (
-                              <div
-                                key={person}
-                                className="flex items-center space-x-2"
-                              >
-                                <Checkbox
-                                  id={`${index}-${person}`}
-                                  checked={allocations[index]?.people[person]}
-                                  onCheckedChange={() =>
-                                    toggleAllocation(index, person)
-                                  }
-                                />
-                                <label
-                                  htmlFor={`${index}-${person}`}
-                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                >
-                                  {person}
-                                </label>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {people.map((person) => (
+                            <Button
+                              key={person}
+                              variant={
+                                allocations[index]?.people[person]
+                                  ? "default"
+                                  : "outline"
+                              }
+                              size="sm"
+                              onClick={() => toggleAllocation(index, person)}
+                              className="text-sm"
+                            >
+                              {person}
+                            </Button>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>

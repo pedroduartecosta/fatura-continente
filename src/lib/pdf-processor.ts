@@ -50,7 +50,8 @@ export async function processReceipt(
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      fullText += content.items.map((item: any) => item.str).join(" ") + " ";
+      fullText +=
+        content.items.map((item: { str: string }) => item.str).join(" ") + " ";
     }
 
     // Split into words and process
