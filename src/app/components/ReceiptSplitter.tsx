@@ -35,6 +35,22 @@ export const ReceiptSplitter = () => {
   const [originalTotal, setOriginalTotal] = useState<number>(0);
   const [cardDiscount, setCardDiscount] = useState<number>(0);
 
+  // Add function to split everything evenly
+  const splitEverything = () => {
+    const newAllocations = { ...allocations };
+    items.forEach((_, index) => {
+      newAllocations[index] = {
+        forAll: true,
+        people: people.reduce(
+          (acc, person) => ({ ...acc, [person]: false }),
+          {}
+        ),
+      };
+    });
+    setAllocations(newAllocations);
+  };
+
+  // Rest of the existing functions...
   const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
@@ -203,13 +219,38 @@ export const ReceiptSplitter = () => {
   }, [calculateSplit]);
 
   return (
-    <div className="w-full max-w-7xl mx-auto">
+    <div className="w-full max-w-7xl mx-auto p-6">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold mb-4">Continente Invoice Splitter</h1>
+        <p className="text-gray-600 max-w-2xl mx-auto">
+          Split your Continente receipts easily with friends. Upload a PDF
+          receipt, add people's names, and allocate items either individually or
+          split them evenly among everyone.
+        </p>
+      </div>
+
       {!file ? (
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Receipt Splitter</CardTitle>
+            <CardTitle>How to Use</CardTitle>
           </CardHeader>
           <CardContent>
+            <ol className="list-decimal list-inside space-y-2 mb-6">
+              <li>
+                Upload your Continente receipt PDF by dropping it or clicking
+                "Select File"
+              </li>
+              <li>Add the names of everyone involved in the split</li>
+              <li>
+                For each item, either:
+                <ul className="list-disc list-inside ml-6 mt-1">
+                  <li>Click "Split Evenly" to divide it among everyone</li>
+                  <li>Or select specific people to split it between them</li>
+                </ul>
+              </li>
+              <li>View the final breakdown in the Summary section</li>
+            </ol>
+
             <div
               className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer"
               onDragOver={(e) => e.preventDefault()}
@@ -320,8 +361,15 @@ export const ReceiptSplitter = () => {
           {/* Right Column - Items */}
           <div className="h-screen pb-6">
             <Card className="h-full">
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Receipt Items</CardTitle>
+                <Button
+                  variant="secondary"
+                  onClick={splitEverything}
+                  className="ml-4"
+                >
+                  Split All Evenly
+                </Button>
               </CardHeader>
               <CardContent className="h-[calc(100%-5rem)] overflow-y-auto">
                 {error && (
