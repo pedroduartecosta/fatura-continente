@@ -3,10 +3,10 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Upload, FilePlus, Plus, X } from "lucide-react";
+import { Upload, FilePlus, Plus, X, Users } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { processReceipt, type ReceiptItem } from "@/lib/pdf-processor";
 
 interface ItemAllocation {
@@ -34,6 +34,7 @@ export const ReceiptSplitter = () => {
   const [totals, setTotals] = useState<ProcessedTotals | null>(null);
   const [originalTotal, setOriginalTotal] = useState<number>(0);
   const [cardDiscount, setCardDiscount] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState<"items" | "summary">("items");
 
   const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -113,16 +114,42 @@ export const ReceiptSplitter = () => {
   };
 
   const toggleAllocation = (itemIndex: number, person: string) => {
-    setAllocations((prev) => ({
-      ...prev,
-      [itemIndex]: {
-        forAll: false,
-        people: {
-          ...prev[itemIndex].people,
-          [person]: !prev[itemIndex].people[person],
+    setAllocations((prev) => {
+      const currentAllocation = prev[itemIndex];
+      const newPeople = { ...currentAllocation.people };
+
+      // If clicking the same person again when they're the only one selected,
+      // reset to split among all
+      const currentlySelected = Object.entries(newPeople).filter(
+        ([_, selected]) => selected
+      );
+      if (
+        currentlySelected.length === 1 &&
+        currentlySelected[0][0] === person &&
+        newPeople[person]
+      ) {
+        return {
+          ...prev,
+          [itemIndex]: {
+            forAll: true,
+            people: Object.keys(newPeople).reduce(
+              (acc, p) => ({ ...acc, [p]: false }),
+              {}
+            ),
+          },
+        };
+      }
+
+      // Otherwise, toggle the person and set forAll to false
+      newPeople[person] = !newPeople[person];
+      return {
+        ...prev,
+        [itemIndex]: {
+          forAll: false,
+          people: newPeople,
         },
-      },
-    }));
+      };
+    });
   };
 
   const calculateSplit = useCallback(() => {
@@ -193,51 +220,23 @@ export const ReceiptSplitter = () => {
       setTotals(newTotals);
     }
   }, [calculateSplit]);
-
   return (
-    <div className="w-full max-w-7xl mx-auto p-6">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold mb-4">Continente Invoice Splitter</h1>
-        <p className="text-gray-600 max-w-2xl mx-auto">
-          Split your Continente receipts easily with friends. Upload a PDF
-          receipt, add people's names, and select specific items for individual
-          allocation.
-        </p>
+    <div className="w-full max-w-7xl mx-auto p-4 md:p-6">
+      <div className="text-center mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold mb-2">
+          Continente Invoice Splitter
+        </h1>
       </div>
 
       {!file ? (
         <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>How to Use</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="list-decimal list-inside space-y-2 mb-6">
-              <li>
-                Upload your Continente receipt PDF by dropping it or clicking
-                "Select File"
-              </li>
-              <li>Add the names of everyone involved in the split</li>
-              <li>
-                By default, all items are split evenly among everyone. For
-                specific items:
-                <ul className="list-disc list-inside ml-6 mt-1">
-                  <li>Click on a person's name to assign the item to them</li>
-                  <li>The item will be split only among selected people</li>
-                  <li>
-                    If no one is selected, the item is split evenly among
-                    everyone
-                  </li>
-                </ul>
-              </li>
-              <li>View the final breakdown in the Summary section</li>
-            </ol>
-
+          <CardContent className="pt-6">
             <div
-              className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer"
+              className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer"
               onDragOver={(e) => e.preventDefault()}
               onDrop={onDrop}
             >
-              <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <Upload className="mx-auto h-8 w-8 md:h-12 md:w-12 text-gray-400 mb-3" />
               <p className="text-gray-600">Drop your receipt PDF here, or</p>
               <label className="mt-2 inline-block">
                 <input
@@ -255,53 +254,78 @@ export const ReceiptSplitter = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Left Column - People and Summary */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>People</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-2 mb-4">
-                  <Input
-                    placeholder="Add person"
-                    value={newPerson}
-                    onChange={(e) => setNewPerson(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && addPerson()}
-                  />
-                  <Button onClick={addPerson}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  {people.map((person) => (
-                    <div
-                      key={person}
-                      className="flex justify-between items-center p-2 bg-gray-50 rounded"
-                    >
-                      <span>{person}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removePerson(person)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+        <>
+          {/* Mobile Tabs - Only visible on mobile */}
+          <div className="flex gap-2 mb-4 md:hidden">
+            <Button
+              variant={activeTab === "items" ? "default" : "outline"}
+              className="flex-1"
+              onClick={() => setActiveTab("items")}
+            >
+              Items
+            </Button>
+            <Button
+              variant={activeTab === "summary" ? "default" : "outline"}
+              className="flex-1"
+              onClick={() => setActiveTab("summary")}
+            >
+              Summary
+            </Button>
+          </div>
 
-            {totals && (
+          {/* Desktop Layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left Column - People and Summary */}
+            <div
+              className={`space-y-6 ${
+                activeTab === "items" ? "hidden md:block" : ""
+              }`}
+            >
               <Card>
                 <CardHeader>
-                  <CardTitle>Summary</CardTitle>
+                  <CardTitle>People</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div>
+                  <div className="flex gap-2 mb-4">
+                    <Input
+                      placeholder="Add person"
+                      value={newPerson}
+                      onChange={(e) => setNewPerson(e.target.value)}
+                      onKeyPress={(e) => e.key === "Enter" && addPerson()}
+                    />
+                    <Button onClick={addPerson}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {people.map((person) => (
+                      <Badge
+                        key={person}
+                        variant="secondary"
+                        className="flex items-center gap-1 p-2"
+                      >
+                        {person}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removePerson(person)}
+                          className="h-4 w-4 p-0 hover:bg-transparent"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {totals && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <span>Subtotal:</span>
                         <span className="text-right">
@@ -316,81 +340,120 @@ export const ReceiptSplitter = () => {
                           €{totals.finalTotal.toFixed(2)}
                         </span>
                       </div>
-                    </div>
 
-                    <div>
-                      <h3 className="font-medium mb-2">Split Results</h3>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        {Object.entries(totals.totals).map(
-                          ([person, amount]) => (
-                            <React.Fragment key={person}>
-                              <span>{person}'s Share:</span>
-                              <span className="text-right">
-                                €{amount.toFixed(2)}
-                              </span>
-                            </React.Fragment>
-                          )
-                        )}
+                      <div className="pt-4 border-t">
+                        <h3 className="font-medium mb-3">Split Results</h3>
+                        <div className="space-y-2">
+                          {Object.entries(totals.totals).map(
+                            ([person, amount]) => (
+                              <div
+                                key={person}
+                                className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                              >
+                                <span>{person}</span>
+                                <span className="font-medium">
+                                  €{amount.toFixed(2)}
+                                </span>
+                              </div>
+                            )
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Right Column - Items */}
+            <div
+              className={`h-auto ${
+                activeTab === "summary" ? "hidden md:block" : ""
+              }`}
+            >
+              <Card className="h-auto">
+                <CardHeader>
+                  <CardTitle>Receipt Items</CardTitle>
+                </CardHeader>
+                <CardContent className="h-[calc(80vh-12rem)] overflow-y-auto">
+                  {error && (
+                    <Alert variant="destructive" className="mb-4">
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  {isProcessing ? (
+                    <div className="text-center py-4">
+                      Processing receipt...
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {items.map((item, index) => {
+                        const allocation = allocations[index];
+                        const selectedPeople = allocation
+                          ? Object.entries(allocation.people)
+                              .filter(([_, selected]) => selected)
+                              .map(([person]) => person)
+                          : [];
+
+                        return (
+                          <div key={index} className="p-4 border rounded-lg">
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <p className="font-medium">
+                                  {item.description}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  €{item.price.toFixed(2)}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Split indicator */}
+                            <div className="mb-2 flex items-center gap-2 text-sm text-gray-600">
+                              <Users className="h-4 w-4" />
+                              {allocation?.forAll ? (
+                                <span>Split among everyone</span>
+                              ) : (
+                                <span>
+                                  {selectedPeople.length === 0
+                                    ? "Split among everyone"
+                                    : `Split between ${selectedPeople.join(
+                                        ", "
+                                      )}`}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              {people.map((person) => (
+                                <Button
+                                  key={person}
+                                  variant={
+                                    allocation?.people[person]
+                                      ? "default"
+                                      : "outline"
+                                  }
+                                  size="sm"
+                                  onClick={() =>
+                                    toggleAllocation(index, person)
+                                  }
+                                  className="text-sm"
+                                >
+                                  {person}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            )}
+            </div>
           </div>
-
-          {/* Right Column - Items */}
-          <div className="h-auto">
-            <Card className="h-auto">
-              <CardHeader>
-                <CardTitle>Receipt Items</CardTitle>
-              </CardHeader>
-              <CardContent className="h-[calc(80vh-12rem)] overflow-y-auto">
-                {error && (
-                  <Alert variant="destructive" className="mb-4">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-
-                {isProcessing ? (
-                  <div className="text-center py-4">Processing receipt...</div>
-                ) : (
-                  <div className="space-y-4">
-                    {items.map((item, index) => (
-                      <div key={index} className="p-4 border rounded-lg">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <p className="font-medium">{item.description}</p>
-                            <p className="text-sm text-gray-500">
-                              €{item.price.toFixed(2)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {people.map((person) => (
-                            <Button
-                              key={person}
-                              variant={
-                                allocations[index]?.people[person]
-                                  ? "default"
-                                  : "outline"
-                              }
-                              size="sm"
-                              onClick={() => toggleAllocation(index, person)}
-                              className="text-sm"
-                            >
-                              {person}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
