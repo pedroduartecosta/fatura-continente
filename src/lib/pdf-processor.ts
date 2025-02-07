@@ -7,7 +7,7 @@ export interface ReceiptItem {
 
 interface ProcessedReceipt {
   items: ReceiptItem[];
-  subtotal: number;
+  subtotal: number | null;
   total: number;
   discount: number;
 }
@@ -16,17 +16,21 @@ function cleanPrice(priceStr: string): number {
   return parseFloat(priceStr.replace(",", "."));
 }
 
-function findSubtotalAndDiscount(text: string): [number, number, number] {
+function findSubtotalAndDiscount(
+  text: string
+): [number | null, number, number] {
   const lines = text.split(/\s+/);
-  let subtotal = 0;
+  let subtotal = null;
   let total = 0;
   let discount = 0;
 
   for (let i = 0; i < lines.length; i++) {
+    // Find subtotal if exists
     if (lines[i] === "SUBTOTAL" && lines[i + 1]?.match(/\d+,\d+/)) {
       subtotal = cleanPrice(lines[i + 1]);
     }
 
+    // Find card discount if exists
     if (
       lines[i] === "Cartao" &&
       lines[i + 1] === "Utilizado" &&
@@ -35,14 +39,23 @@ function findSubtotalAndDiscount(text: string): [number, number, number] {
       discount = cleanPrice(lines[i + 2]);
     }
 
+    // Find total amount
     if (
       lines[i] === "TOTAL" &&
       lines[i + 1] === "A" &&
       lines[i + 2] === "PAGAR" &&
       lines[i + 3]?.match(/\d+,\d+/)
     ) {
-      total = cleanPrice(lines[i + 2]);
+      total = cleanPrice(lines[i + 3]);
+    } else if (lines[i] === "TOTAL" && lines[i + 1]?.match(/\d+,\d+/)) {
+      // Alternative format for total
+      total = cleanPrice(lines[i + 1]);
     }
+  }
+
+  // If no subtotal found, calculate from total and discount
+  if (subtotal === null && total > 0) {
+    subtotal = total + discount;
   }
 
   return [subtotal, total, discount];
@@ -78,7 +91,7 @@ export async function processReceipt(
       const word = words[i];
 
       // Stop at summary section
-      if (word === "SUBTOTAL") {
+      if (word === "SUBTOTAL" || word === "TOTAL") {
         break;
       }
 
