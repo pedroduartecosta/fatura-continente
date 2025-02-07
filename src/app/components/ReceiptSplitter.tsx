@@ -7,10 +7,11 @@ import React, { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, FilePlus, Plus, X, Users } from "lucide-react";
+import { Upload, FilePlus, Plus, X, Users, Eye, EyeOff } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { processReceipt, type ReceiptItem } from "@/lib/pdf-processor";
+import PDFViewer from "./pdfviewer";
 
 interface ItemAllocation {
   forAll: boolean;
@@ -26,6 +27,7 @@ interface ProcessedTotals {
 
 export const ReceiptSplitter = () => {
   const [file, setFile] = useState<File | null>(null);
+  const [showPDF, setShowPDF] = useState(false);
   const [items, setItems] = useState<ReceiptItem[]>([]);
   const [people, setPeople] = useState<string[]>([]);
   const [newPerson, setNewPerson] = useState("");
@@ -91,7 +93,6 @@ export const ReceiptSplitter = () => {
         arrayBuffer
       );
 
-      console.log("items", items.length);
       setItems(items);
       setCardDiscount(discount);
 
@@ -252,6 +253,7 @@ export const ReceiptSplitter = () => {
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   accept=".pdf"
                   onChange={onFileSelect}
+                  aria-label="Upload PDF"
                 />
                 <Button variant="outline" className="pointer-events-none">
                   <FilePlus className="mr-2 h-4 w-4" />
@@ -368,6 +370,36 @@ export const ReceiptSplitter = () => {
                         </div>
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* PDF Toggle Button */}
+              <div className="mb-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPDF(!showPDF)}
+                  className="w-full md:w-auto"
+                >
+                  {showPDF ? (
+                    <>
+                      <EyeOff className="mr-2 h-4 w-4" />
+                      Hide Receipt
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="mr-2 h-4 w-4" />
+                      View Receipt
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* PDF Viewer */}
+              {showPDF && (
+                <Card className="mb-6">
+                  <CardContent className="pt-6">
+                    <PDFViewer file={file} />
                   </CardContent>
                 </Card>
               )}
