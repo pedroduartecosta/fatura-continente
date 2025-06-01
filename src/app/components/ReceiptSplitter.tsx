@@ -7,6 +7,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Upload, FilePlus, Plus, X, Users, Eye, EyeOff } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -340,22 +341,18 @@ export const ReceiptSplitter = () => {
                   <CardContent>
                     <div className="space-y-4">
                       {cardDiscount > 0 && (
-                        <div className="flex items-center space-x-2 mb-4">
-                          <input
-                            id="discount-toggle"
-                            type="checkbox"
-                            checked={includeDiscount}
-                            onChange={(e) =>
-                              setIncludeDiscount(e.target.checked)
-                            }
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
+                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                           <label
                             htmlFor="discount-toggle"
                             className="text-sm font-medium"
                           >
                             Include card discount
                           </label>
+                          <Switch
+                            id="discount-toggle"
+                            checked={includeDiscount}
+                            onCheckedChange={setIncludeDiscount}
+                          />
                         </div>
                       )}
 
