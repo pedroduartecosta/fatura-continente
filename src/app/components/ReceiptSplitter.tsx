@@ -1,17 +1,17 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-"use client";
+'use client';
 
-import React, { useState, useCallback, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Upload, FilePlus, Plus, X, Users, Eye, EyeOff } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { processReceipt, type ReceiptItem } from "@/lib/pdf-processor";
-import PDFViewer from "./pdfviewer";
+import React, { useState, useCallback, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Upload, FilePlus, Plus, X, Users, Eye, EyeOff } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { processReceipt, type ReceiptItem } from '@/lib/pdf-processor';
+import PDFViewer from './pdfviewer';
 
 interface ItemAllocation {
   forAll: boolean;
@@ -30,7 +30,7 @@ export const ReceiptSplitter = () => {
   const [showPDF, setShowPDF] = useState(false);
   const [items, setItems] = useState<ReceiptItem[]>([]);
   const [people, setPeople] = useState<string[]>([]);
-  const [newPerson, setNewPerson] = useState("");
+  const [newPerson, setNewPerson] = useState('');
   const [allocations, setAllocations] = useState<
     Record<number, ItemAllocation>
   >({});
@@ -38,12 +38,13 @@ export const ReceiptSplitter = () => {
   const [error, setError] = useState<string | null>(null);
   const [totals, setTotals] = useState<ProcessedTotals | null>(null);
   const [cardDiscount, setCardDiscount] = useState<number>(0);
-  const [activeTab, setActiveTab] = useState<"items" | "summary">("items");
+  const [activeTab, setActiveTab] = useState<'items' | 'summary'>('items');
+  const [includeDiscount, setIncludeDiscount] = useState(true);
 
   const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile?.type === "application/pdf") {
+    if (droppedFile?.type === 'application/pdf') {
       setFile(droppedFile);
       processFile(droppedFile);
     }
@@ -60,7 +61,7 @@ export const ReceiptSplitter = () => {
   const addPerson = () => {
     if (newPerson.trim() && !people.includes(newPerson.trim())) {
       setPeople([...people, newPerson.trim()]);
-      setNewPerson("");
+      setNewPerson('');
 
       // Update allocations with the new person
       const updatedAllocations = { ...allocations };
@@ -109,7 +110,7 @@ export const ReceiptSplitter = () => {
       });
       setAllocations(initialAllocations);
     } catch (error) {
-      console.error("Error processing receipt:", error);
+      console.error('Error processing receipt:', error);
       setError(
         "Failed to process the receipt. Please make sure it's a valid PDF receipt."
       );
@@ -200,11 +201,13 @@ export const ReceiptSplitter = () => {
       }
     });
 
-    // Apply card discount evenly among all people
-    const discountPerPerson = cardDiscount / people.length;
-    Object.keys(personTotals).forEach((person) => {
-      personTotals[person] -= discountPerPerson;
-    });
+    // Apply card discount evenly among all people only if includeDiscount is true
+    if (includeDiscount) {
+      const discountPerPerson = cardDiscount / people.length;
+      Object.keys(personTotals).forEach((person) => {
+        personTotals[person] -= discountPerPerson;
+      });
+    }
 
     const finalTotal = Object.values(personTotals).reduce(
       (sum, amount) => sum + amount,
@@ -213,11 +216,11 @@ export const ReceiptSplitter = () => {
 
     return {
       subtotal,
-      discount: cardDiscount,
+      discount: includeDiscount ? cardDiscount : 0,
       finalTotal,
       totals: personTotals,
     };
-  }, [items, people, allocations, cardDiscount]);
+  }, [items, people, allocations, cardDiscount, includeDiscount]);
 
   // Update totals whenever allocations change
   useEffect(() => {
@@ -268,16 +271,16 @@ export const ReceiptSplitter = () => {
           {/* Mobile Tabs */}
           <div className="flex gap-2 mb-4 md:hidden">
             <Button
-              variant={activeTab === "items" ? "default" : "outline"}
+              variant={activeTab === 'items' ? 'default' : 'outline'}
               className="flex-1"
-              onClick={() => setActiveTab("items")}
+              onClick={() => setActiveTab('items')}
             >
               Items
             </Button>
             <Button
-              variant={activeTab === "summary" ? "default" : "outline"}
+              variant={activeTab === 'summary' ? 'default' : 'outline'}
               className="flex-1"
-              onClick={() => setActiveTab("summary")}
+              onClick={() => setActiveTab('summary')}
             >
               Summary
             </Button>
@@ -288,7 +291,7 @@ export const ReceiptSplitter = () => {
             {/* Left Column - People and Summary */}
             <div
               className={`space-y-6 ${
-                activeTab === "items" ? "hidden md:block" : ""
+                activeTab === 'items' ? 'hidden md:block' : ''
               }`}
             >
               <Card>
@@ -301,7 +304,7 @@ export const ReceiptSplitter = () => {
                       placeholder="Add person"
                       value={newPerson}
                       onChange={(e) => setNewPerson(e.target.value)}
-                      onKeyPress={(e) => e.key === "Enter" && addPerson()}
+                      onKeyPress={(e) => e.key === 'Enter' && addPerson()}
                     />
                     <Button onClick={addPerson}>
                       <Plus className="h-4 w-4" />
@@ -336,6 +339,26 @@ export const ReceiptSplitter = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
+                      {cardDiscount > 0 && (
+                        <div className="flex items-center space-x-2 mb-4">
+                          <input
+                            id="discount-toggle"
+                            type="checkbox"
+                            checked={includeDiscount}
+                            onChange={(e) =>
+                              setIncludeDiscount(e.target.checked)
+                            }
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <label
+                            htmlFor="discount-toggle"
+                            className="text-sm font-medium"
+                          >
+                            Include card discount
+                          </label>
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <span>Subtotal:</span>
                         <span className="text-right">
@@ -408,7 +431,7 @@ export const ReceiptSplitter = () => {
             {/* Right Column - Items */}
             <div
               className={`h-auto ${
-                activeTab === "summary" ? "hidden md:block" : ""
+                activeTab === 'summary' ? 'hidden md:block' : ''
               }`}
             >
               <Card className="h-auto">
@@ -457,9 +480,9 @@ export const ReceiptSplitter = () => {
                               ) : (
                                 <span>
                                   {selectedPeople.length === 0
-                                    ? "Split among everyone"
+                                    ? 'Split among everyone'
                                     : `Split between ${selectedPeople.join(
-                                        ", "
+                                        ', '
                                       )}`}
                                 </span>
                               )}
@@ -471,8 +494,8 @@ export const ReceiptSplitter = () => {
                                   key={person}
                                   variant={
                                     allocation?.people[person]
-                                      ? "default"
-                                      : "outline"
+                                      ? 'default'
+                                      : 'outline'
                                   }
                                   size="sm"
                                   onClick={() =>
