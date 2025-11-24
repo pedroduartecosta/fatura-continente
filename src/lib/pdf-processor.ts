@@ -88,7 +88,7 @@ export async function processReceipt(
     let parsingQuantity = false;
     let inItemsSection = false;
 
-    let pendingItems: { description: string[] }[] = [];
+    const pendingItems: { description: string[] }[] = [];
 
     for (let i = 0; i < words.length; i++) {
       const word = words[i];
