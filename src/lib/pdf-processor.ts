@@ -88,6 +88,8 @@ export async function processReceipt(
     let parsingQuantity = false;
     let inItemsSection = false;
 
+    let pendingItems: { description: string[] }[] = [];
+
     for (let i = 0; i < words.length; i++) {
       const word = words[i];
 
@@ -100,7 +102,7 @@ export async function processReceipt(
       }
 
       // Stop at summary section - be more specific about stopping conditions
-      if (inItemsSection && word === 'SUBTOTAL') {
+      if (inItemsSection && (word === 'SUBTOTAL' || word === 'TOTAL' || word === 'IVA')) {
         break;
       }
 
@@ -147,6 +149,9 @@ export async function processReceipt(
             description: currentItem.description.join(' ').trim(),
             price: currentItem.price,
           });
+        } else if (currentItem?.description?.length) {
+            // It has description but no price yet. It's a pending item.
+            pendingItems.push(currentItem);
         }
         currentItem = { description: [] };
         parsingQuantity = false;
@@ -225,6 +230,15 @@ export async function processReceipt(
             });
             currentItem = null;
           }
+        } else if (pendingItems.length > 0) {
+            // Assign price to the first pending item
+            const pending = pendingItems.shift();
+            if (pending) {
+                items.push({
+                    description: pending.description.join(' ').trim(),
+                    price: price
+                });
+            }
         }
         parsingQuantity = false;
         continue;
